@@ -1,4 +1,4 @@
-import type { SensorData } from './sensorData.types'; // <-- FIX: import type
+import type { SensorData, SensorPointData } from './sensorData.types'; // <-- FIX: import type
 
 // --- MASTER TIME SETUP ---
 const DATA_DURATION_S = 3600; // 1 hour of data
@@ -169,13 +169,6 @@ const allParameters: Record<string, SensorData> = {
   },
 };
 
-// This is the new structure that our app will use
-export interface SensorPointData {
-  pointId: string; // 'chest' or 'hand'
-  pointName: string; // 'Chest Sensors' or 'Hand Sensor'
-  parameters: SensorData[]; // A list of all available parameters for that point
-}
-
 // This is our new mock database, grouped by sensor point
 const mockSensorPointDatabase: Record<string, SensorPointData> = {
   'chest': {
@@ -227,10 +220,47 @@ export const getMockDataForSensorPoint = (
   });
 };
 
+// --- HELPER FUNCTIONS FOR AI ---
+/**
+ * Finds the start and end indices for a given time range.
+ */
+const getIndicesForTimeRange = (
+  xAxisData: number[],
+  startTime: number,
+  endTime: number,
+): [number, number] => {
+  let startIndex = -1;
+  let endIndex = -1;
+
+  for (let i = 0; i < xAxisData.length; i++) {
+    if (xAxisData[i] >= startTime) {
+      startIndex = i;
+      break;
+    }
+  }
+  if (startIndex === -1) return [-1, -1];
+
+  for (let i = xAxisData.length - 1; i >= startIndex; i--) {
+    if (xAxisData[i] <= endTime) {
+      endIndex = i;
+      break;
+    }
+  }
+  return [startIndex, endIndex];
+};
+
+/**
+ * Calculates the average of a numeric array.
+ */
+const calculateAverage = (data: number[]): number | null => {
+  if (!data || data.length === 0) return null;
+  const sum = data.reduce((acc, val) => acc + val, 0);
+  return Math.round((sum / data.length) * 10) / 10;
+};
+// --- END HELPER FUNCTIONS ---
+
 /**
  * MOCK AI: Generates an overall status emoji and insight.
- * --- THIS IS THE FIX ---
- * The signature is now (SensorData[], number[]) to match App.tsx
  */
 export const getOverallStatusAI = async (
   allData: SensorData[],
@@ -239,27 +269,62 @@ export const getOverallStatusAI = async (
   // Simulate AI thinking
   await new Promise((res) => setTimeout(res, 250));
 
-  // Find the 'stress' and 'heart-rate' params to make a decision
-  const stressParam = allData.find((p) => p.id === 'stress');
-  const hrParam = allData.find((p) => p.id === 'heart-rate');
   const [startTime, endTime] = timeRange;
 
-  let avgStress = 5; // Default
-  let avgHr = 75; // Default
+  // Find the 'stress' and 'heart-rate' params
+  const stressParam = allData.find((p) => p.id === 'stress');
+  const hrParam = allData.find((p) => p.id === 'heart-rate');
 
-  // Simple (and crude) calculation for demo
+  let avgStress: number | null = 5; // Default
+  let avgHr: number | null = 75; // Default
+
+  // --- THIS IS THE FIX ---
+  // Now we *actually* calculate the average for the selected timeRange
   if (stressParam) {
-    const data = stressParam.payload.series[0].data;
-    avgStress = data[Math.floor(data.length / 2)] || 5;
-  }
-  if (hrParam) {
-    const data = hrParam.payload.series[0].data;
-    avgHr = data[Math.floor(data.length / 2)] || 75;
+    const [startIndex, endIndex] = getIndicesForTimeRange(
+      stressParam.payload.xAxis[0].data,
+      startTime,
+      endTime,
+    );
+    if (startIndex !== -1) {
+      const dataSlice = stressParam.payload.series[0].data.slice(
+        startIndex,
+        endIndex + 1,
+      );
+      avgStress = calculateAverage(dataSlice);
+    } else {
+      avgStress = null; // No data in this range
+    }
   }
 
-  const timeString = `around ${Math.floor(startTime / 60)}m-${Math.floor(
+  if (hrParam) {
+    const [startIndex, endIndex] = getIndicesForTimeRange(
+      hrParam.payload.xAxis[0].data,
+      startTime,
+      endTime,
+    );
+    if (startIndex !== -1) {
+      const dataSlice = hrParam.payload.series[0].data.slice(
+        startIndex,
+        endIndex + 1,
+      );
+      avgHr = calculateAverage(dataSlice);
+    } else {
+      avgHr = null; // No data in this range
+    }
+  }
+  // --- END OF FIX ---
+
+  const timeString = `around ${Math.floor(startTime / 60)}m - ${Math.floor(
     endTime / 60,
   )}m`;
+
+  if (avgStress === null || avgHr === null) {
+    return {
+      emoji: '🤔',
+      insight: `AI Insight: No data available for the selected time period (${timeString}).`,
+    };
+  }
 
   if (avgStress > 7 && avgHr > 85) {
     return {

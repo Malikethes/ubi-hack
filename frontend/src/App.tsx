@@ -294,7 +294,7 @@ function App() {
                     flex: '1 1 60%', // Takes up 60%
                     display: 'flex',
                     flexDirection: 'column',
-                    alignItems: 'center',
+                    // alignItems: 'center', // <-- REMOVED
                     minWidth: 0,
                   }}
                 >
@@ -304,7 +304,7 @@ function App() {
                     gutterBottom
                     sx={{
                       mt: { xs: 0, md: 2 },
-                      textAlign: 'center',
+                      textAlign: 'center', // <-- ADDED
                       fontWeight: 600,
                       color: 'text.primary',
                     }}
@@ -314,7 +314,10 @@ function App() {
                   <Typography
                     variant="body1" // Slightly bigger subtext
                     color="text.secondary"
-                    sx={{ mb: { xs: 2, md: 4 }, textAlign: 'center' }}
+                    sx={{
+                      mb: { xs: 2, md: 4 },
+                      textAlign: 'center', // <-- ADDED
+                    }}
                   >
                     Click a sensor point to view detailed analysis.
                   </Typography>
