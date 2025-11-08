@@ -40,6 +40,7 @@ const TimeRangeSlider: React.FC<TimeRangeSliderProps> = ({
       </Typography>
 
       <Slider
+        step={5}
         value={value}
         onChange={handleChange}
         min={masterStart}

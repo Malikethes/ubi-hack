@@ -17,10 +17,27 @@ interface ApiResponse {
   y_values: number[];
 }
 
+// --- NEW Subject Info Type ---
+export interface SubjectInfo {
+  age: number;
+  height: number; // in cm
+  weight: number; // in kg
+  gender: 'male' | 'female' | 'other';
+  dominant_hand: 'right' | 'left';
+  coffee_today: boolean;
+  coffee_last_hour: boolean;
+  sports_today: boolean;
+  smoker: boolean;
+  smoke_last_hour: boolean;
+  ill: boolean;
+  additional_notes: string;
+}
+// --- END NEW Type ---
+
 /**
  * Transforms the backend's data format into our app's format.
- * @param id 'heart-rate', 'breathing-rate', 'stress', 'temperature', 'pulse-transit-time', 'activity', 'eda'
- * @param name 'Heart Rate', 'Breathing Rate', etc.
+ * @param id 'heart-rate', 'breathing-rate', 'stress', 'temperature', 'pulse-transit-time', 'activity'
+ * @param name 'Heart Rate', 'Breathing Rate', 'Stress Level', 'Body Temperature', 'Pulse Transit Time', 'Movement'
  * @param apiData The raw JSON response from the backend
  */
 const transformApiData = (
@@ -42,7 +59,7 @@ const transformApiData = (
   else if (id === 'temperature') unit = '°C';
   else if (id === 'pulse-transit-time') unit = 'ms';
   else if (id === 'activity') unit = 'g';
-  else if (id === 'eda') unit = 'μS'; // <-- NEW EDA UNIT
+  else if (id === 'eda') unit = 'μS'; // <-- NEW
 
   const currentValue = `${lastValue.toFixed(1)} ${unit}`;
 
@@ -54,16 +71,18 @@ const transformApiData = (
   else if (id === 'temperature') color = '#eab308';
   else if (id === 'pulse-transit-time') color = '#6366f1';
   else if (id === 'activity') color = '#8b5cf6';
-  else if (id === 'eda') color = '#06b6d4'; // <-- NEW EDA COLOR
+  else if (id === 'eda') color = '#00bcd4'; // <-- NEW
 
   // --- Dynamic Y-axis Calculation ---
   const dataMin = Math.min(...apiData.y_values);
   const dataMax = Math.max(...apiData.y_values);
   let padding = (dataMax - dataMin) * 0.1; // 10% padding
 
-  if (padding === 0 || isNaN(padding)) {
-    // Handle cases where all values are the same or API returns no data
-    padding = dataMax * 0.1 || 1; // Use 10% of max, or 1 if max is 0
+  if (padding === 0) {
+    padding = dataMax * 0.1;
+  }
+  if (padding === 0) {
+    padding = 5;
   }
 
   const finalMin = Math.max(0, dataMin - padding); // Don't go below 0
@@ -88,7 +107,7 @@ const transformApiData = (
       xAxis: [
         {
           data: apiData.x_values,
-          scaleType: 'linear', // It's a time-based linear scale (seconds)
+          scaleType: 'linear', // It's a time-based linear scale
         },
       ],
       // Apply our dynamic Y-axis
@@ -97,12 +116,8 @@ const transformApiData = (
   };
 };
 
-/**
- * Fetches and transforms Heart Rate data.
- * @param subject e.g., "S2"
- * @param sensor e.g., "chest"
- * @param modality e.g., "ECG"
- */
+// --- FETCH FUNCTIONS ---
+
 export const fetchHeartRateData = async (
   subject: string,
   sensor: string,
@@ -123,10 +138,6 @@ export const fetchHeartRateData = async (
   }
 };
 
-/**
- * Fetches and transforms Breathing Rate data.
- * @param subject e.g., "S2"
- */
 export const fetchBreathingRateData = async (
   subject: string,
 ): Promise<SensorData> => {
@@ -145,11 +156,6 @@ export const fetchBreathingRateData = async (
   }
 };
 
-/**
- * Fetches and transforms Stress Level data.
- * @param subject e.g., "S2"
- * @param sensor e.g., "wrist"
- */
 export const fetchStressLevelData = async (
   subject: string,
   sensor: string,
@@ -169,17 +175,11 @@ export const fetchStressLevelData = async (
   }
 };
 
-/**
- * Fetches and transforms Temperature data.
- * @param subject e.g., "S2"
- * @param sensor e.g., "wrist"
- * @param modality e.g., "TEMP"
- */
 export const fetchTemperatureData = async (
   subject: string,
   sensor: string,
   modality: string,
-): Promise<SensorData> => {
+) => {
   const url = `${BASE_URL}/data/temperature?subject=${subject}&sensor=${sensor}&modality=${modality}`;
   console.log(`Fetching REAL data from: ${url}`);
   try {
@@ -195,10 +195,6 @@ export const fetchTemperatureData = async (
   }
 };
 
-/**
- * Fetches and transforms Pulse Transit Time data.
- * @param subject e.g., "S2"
- */
 export const fetchPulseTransitTimeData = async (
   subject: string,
 ): Promise<SensorData> => {
@@ -221,12 +217,6 @@ export const fetchPulseTransitTimeData = async (
   }
 };
 
-/**
- * Fetches and transforms Movement (Activity) data.
- * @param subject e.g., "S2"
- * @param sensor e.g., "wrist"
- * @param modality e.g., "ACC"
- */
 export const fetchMovementData = async (
   subject: string,
   sensor: string,
@@ -247,12 +237,6 @@ export const fetchMovementData = async (
   }
 };
 
-/**
- * Fetches and transforms Skin Conductance (EDA) data.
- * @param subject e.g., "S2"
- * @param sensor e.g., "wrist"
- * @param modality e.g., "EDA"
- */
 export const fetchSkinConductanceData = async (
   subject: string,
   sensor: string,
@@ -268,7 +252,30 @@ export const fetchSkinConductanceData = async (
     const apiData: ApiResponse = await response.json();
     return transformApiData('eda', 'Skin Conductance (EDA)', apiData);
   } catch (error) {
-    console.error('Failed to fetch Skin Conductance (EDA) data:', error);
+    console.error('Failed to fetch Skin Conductance data:', error);
+    throw error;
+  }
+};
+
+/**
+ * NEW: Fetches static subject biographical and contextual information.
+ * @param subject e.g., "S2"
+ */
+export const fetchSubjectInfo = async (
+  subject: string,
+): Promise<SubjectInfo> => {
+  const url = `${BASE_URL}/data/subject_info?subject=${subject}`;
+  console.log(`Fetching Subject Info from: ${url}`);
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Network response was not ok: ${response.statusText}`);
+    }
+    const info: SubjectInfo = await response.json();
+    return info;
+  } catch (error) {
+    console.error('Failed to fetch subject info:', error);
+    // Throw error so App.tsx can handle loading state
     throw error;
   }
 };

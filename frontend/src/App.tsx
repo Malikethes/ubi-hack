@@ -12,17 +12,18 @@ import SensorModal from './components/SensorModal';
 import PersonaSelection from './components/PersonaSelection';
 import TimeRangeSlider from './components/TimeRangeSlider';
 import StatusPanel from './components/StatusPanel';
-// --- IMPORT CHANGE ---
-// We now import from our new 'dataService' controller
+import SubjectInfoModal from './components/SubjectInfoModal';
+import AIVibesLoading from './components/AIVibesLoading'; // <-- NEW IMPORT
+// --- DATA IMPORTS ---
 import {
   fetchSensorPointData,
   getOverallStatusAI,
 } from './data/dataService';
-// --- THIS IS THE FIX for Error 3 ---
 import { mockSensorPointDatabase } from './data/mockData';
-// --- END IMPORT CHANGE ---
+// --- TYPE IMPORTS ---
 import type { SummaryData } from './components/StatusPanel';
 import type { SensorData, SensorPointData } from './data/sensorData.types';
+import { fetchSubjectInfo, type SubjectInfo } from './services/apiService';
 import { calculateSummary } from './utils/dataCalculator';
 
 // A simple, reassuring theme
@@ -105,19 +106,38 @@ function App() {
     insight: string;
   } | null>(null);
 
-  // --- DATA FETCHING ---
-  // This effect runs when the selectedDataset changes
+  // --- SUBJECT INFO STATE ---
+  const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
+  const [subjectInfo, setSubjectInfo] = useState<SubjectInfo | null>(null);
+  const [isSubjectInfoLoading, setIsSubjectInfoLoading] = useState(false);
+  // --- END SUBJECT INFO STATE ---
+
+  // --- DATA FETCHING (MAIN EFFECT) ---
+  // This effect handles the two-stage loading
   useEffect(() => {
-    console.log(`Fetching all data for dataset: ${selectedDataset}`);
-    setIsAppLoading(true);
+    console.log(`Fetching data for dataset: ${selectedDataset}`);
+    setIsSubjectInfoLoading(true); // Stage 1: Load essential info first
+    setAllData([]); // Clear previous data
+    setSummaryData(null);
+    setOverallStatus(null);
+    
+    // Stage 1: Fetch essential info (must be fetched first for immediate use)
+    const infoPromise = fetchSubjectInfo(selectedDataset);
 
-    // Fetch both sensor points at the same time
-    const chestPromise = fetchSensorPointData('chest', selectedDataset);
-    const handPromise = fetchSensorPointData('hand', selectedDataset);
+    infoPromise
+      .then((info) => {
+        setSubjectInfo(info);
+        setIsSubjectInfoLoading(false); // Stage 1 complete
 
-    Promise.all([chestPromise, handPromise])
+        // Stage 2: Load heavy sensor data (starts only after info is ready)
+        setIsAppLoading(true);
+
+        const chestPromise = fetchSensorPointData('chest', selectedDataset);
+        const handPromise = fetchSensorPointData('hand', selectedDataset);
+
+        return Promise.all([chestPromise, handPromise]);
+      })
       .then(([chestData, handData]) => {
-        // Combine all parameters into one big list
         const allParams = [
           ...chestData.parameters,
           ...handData.parameters,
@@ -125,24 +145,23 @@ function App() {
         setAllData(allParams);
       })
       .catch((err) => {
-        console.error('Error fetching initial data:', err);
-        setAllData([]); // Set to empty on error
+        console.error('Error fetching data:', err);
+        setAllData([]);
+        setSubjectInfo(null);
+        setIsSubjectInfoLoading(false); // Ensure loader is dismissed
       })
       .finally(() => {
-        setIsAppLoading(false);
+        setIsAppLoading(false); // Stage 2 complete
       });
-  }, [selectedDataset]); // Re-run when dataset changes
+  }, [selectedDataset]);
 
-  // --- SUMMARY CALCULATION ---
-  // This runs when the time slider or data changes
-  // --- THIS IS THE FIX for Error 1 & 2 ---
+  // --- SUMMARY CALCULATION (UNCHANGED LOGIC) ---
   useMemo(() => {
     if (!allData || allData.length === 0) {
       setSummaryData(null);
       return;
     }
 
-    // Build the summary object for the left panel
     const newSummary: SummaryData = {
       'heart-rate': calculateSummary(
         allData.find((p) => p.id === 'heart-rate')!,
@@ -166,22 +185,18 @@ function App() {
       ),
     };
     setSummaryData(newSummary);
-    // --- END OF FIX ---
 
-    // Calculate the overall AI status emoji
     getOverallStatusAI(allData, timeRange).then((status) => {
       setOverallStatus(status);
     });
   }, [allData, timeRange]);
 
-  // --- EVENT HANDLERS ---
+  // --- EVENT HANDLERS (UNCHANGED) ---
   const handleSensorClick = async (sensorPointId: string) => {
     setModalLoading(true);
     setSensorPointData(null);
     setModalOpen(true);
 
-    // We don't need to re-fetch! We already have all the data.
-    // We just filter what we need for the modal.
     const pointTemplate = mockSensorPointDatabase[sensorPointId];
     if (!pointTemplate) {
       console.error(`No template found for point: ${sensorPointId}`);
@@ -235,11 +250,14 @@ function App() {
               sx={{
                 p: 2,
                 borderBottom: `1px solid ${theme.palette.divider}`,
+                position: 'relative', // Context for loading overlay
+                zIndex: 2, // Ensure selector is above loading screen
               }}
             >
               <PersonaSelection
                 selectedDataset={selectedDataset}
                 onSelectDataset={setSelectedDataset}
+                onOpenInfo={() => setIsInfoModalOpen(true)}
               />
             </Box>
 
@@ -248,9 +266,14 @@ function App() {
               sx={{
                 display: 'flex',
                 flexGrow: 1,
-                flexDirection: { xs: 'column', md: 'row' }, // Stack on mobile
+                flexDirection: { xs: 'column', md: 'row' },
+                position: 'relative', // Context for AIVibesLoading
               }}
             >
+              {/* --- NEW: AI VIBES LOADING OVERLAY --- */}
+              <AIVibesLoading isLoading={isAppLoading} />
+              {/* --- END NEW --- */}
+
               {/* Left Column (Status Panel) */}
               <Box
                 sx={{
@@ -259,6 +282,8 @@ function App() {
                   borderRight: { xs: 'none', md: `1px solid ${theme.palette.divider}` },
                   borderBottom: { xs: `1px solid ${theme.palette.divider}`, md: 'none' },
                   flexShrink: 0,
+                  // Ensure panel is usable when loaded
+                  pointerEvents: isAppLoading ? 'none' : 'auto',
                 }}
               >
                 <StatusPanel summary={summaryData} isLoading={isAppLoading} />
@@ -271,7 +296,9 @@ function App() {
                   p: 3,
                   display: 'flex',
                   flexDirection: 'column',
-                  minHeight: '400px', // Ensure it has height
+                  minHeight: '400px',
+                  // Ensure panel is usable when loaded
+                  pointerEvents: isAppLoading ? 'none' : 'auto',
                 }}
               >
                 <Typography variant="h6" component="h3">
@@ -312,7 +339,16 @@ function App() {
           onClose={handleCloseModal}
           sensorPointData={selectedSensorPointData}
           isLoading={modalLoading}
-          timeRange={timeRange} // Pass the timeRange to the modal
+          timeRange={timeRange}
+        />
+        
+        {/* Subject Info Modal (NEW) */}
+        <SubjectInfoModal
+          open={isInfoModalOpen}
+          onClose={() => setIsInfoModalOpen(false)}
+          subjectId={selectedDataset}
+          info={subjectInfo}
+          isLoading={isSubjectInfoLoading}
         />
       </Box>
     </ThemeProvider>
