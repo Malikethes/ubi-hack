@@ -7,73 +7,98 @@ const DATA_POINTS_COUNT = DATA_DURATION_S / DATA_INTERVAL_S + 1; // 721 points
 
 /**
  * Generates a smooth random walk for data.
+ * @param count Number of data points
+ * @param min Minimum value
+ * @param max Maximum value
+ * @param step Max step size per point
  */
 const generateRandomWalk = (
   count: number,
   min: number,
   max: number,
-  initialValue?: number,
+  step: number,
 ): number[] => {
-  let val = initialValue !== undefined ? initialValue : (min + max) / 2;
-  const data: number[] = [];
+  const data = [];
+  let value = (min + max) / 2;
   for (let i = 0; i < count; i++) {
-    val += (Math.random() - 0.5) * (max - min) * 0.05; // Small random steps
-    val = Math.max(min, Math.min(max, val)); // Clamp within min/max
-    data.push(Math.round(val * 10) / 10); // Push rounded value
+    value += (Math.random() - 0.5) * 2 * step;
+    value = Math.min(Math.max(value, min), max); // Clamp value
+    data.push(Math.round(value * 10) / 10); // Round to 1 decimal
   }
   return data;
 };
 
-// Generate time axis (0, 5, 10, ... 3600)
-const timeAxis = Array.from(
+// --- TIME AXIS DATA ---
+// Generate a single time axis for all time-series data
+const timeAxisData = Array.from(
   { length: DATA_POINTS_COUNT },
   (_, i) => i * DATA_INTERVAL_S,
 );
 
 // This is our database of *individual parameters*
+// This is where we define *all* parameters the app *could* know about.
 const allParameters: Record<string, SensorData> = {
+  // --- REAL DATA (will be fetched) ---
   'heart-rate': {
     id: 'heart-rate',
     name: 'Heart Rate',
-    currentValue: '...', // This value is calculated in StatusPanel
+    currentValue: '...',
     visualizationType: 'line',
-    payload: {
-      series: [
-        {
-          data: generateRandomWalk(DATA_POINTS_COUNT, 60, 90, 70),
-          label: 'BPM',
-          showMark: false,
-          area: true,
-          color: '#ef4444',
-        },
-      ],
-      xAxis: [{ data: timeAxis, scaleType: 'linear' }],
-    },
+    payload: {}, // Will be filled by API
+  },
+  'breathing-rate': {
+    id: 'breathing-rate',
+    name: 'Breathing Rate',
+    currentValue: '...',
+    visualizationType: 'line',
+    payload: {}, // Will be filled by API
+  },
+  'stress': {
+    id: 'stress',
+    name: 'Stress Level',
+    currentValue: '...',
+    visualizationType: 'line',
+    payload: {}, // Will be filled by API
   },
   'temperature': {
     id: 'temperature',
     name: 'Body Temperature',
     currentValue: '...',
-    visualizationType: 'area',
+    visualizationType: 'line',
+    payload: {}, // Will be filled by API
+  },
+  'pulse-transit-time': {
+    id: 'pulse-transit-time',
+    name: 'Pulse Transit Time',
+    currentValue: '...',
+    visualizationType: 'line',
+    payload: {}, // Will be filled by API
+  },
+
+  // --- MOCK DATA (will be used as fallback) ---
+  'activity': {
+    id: 'activity',
+    name: 'Activity',
+    currentValue: '...',
+    visualizationType: 'line',
     payload: {
       series: [
         {
-          data: generateRandomWalk(DATA_POINTS_COUNT, 36.5, 37.2, 36.8),
-          label: '°C',
+          data: generateRandomWalk(DATA_POINTS_COUNT, 0, 5, 0.2),
+          label: 'Movement',
           showMark: false,
           area: true,
-          color: '#f59e0b',
+          color: '#8b5cf6',
         },
       ],
-      xAxis: [{ data: timeAxis, scaleType: 'linear' }],
-      yAxis: [{ min: 36, max: 38 }],
+      xAxis: [{ data: timeAxisData, scaleType: 'linear' }],
     },
   },
   'blood-pressure': {
     id: 'blood-pressure',
     name: 'Blood Pressure',
-    currentValue: '...',
-    visualizationType: 'bar', // This is a CATEGORICAL chart
+    currentValue: '120/80',
+    visualizationType: 'bar',
     payload: {
       series: [
         {
@@ -90,7 +115,7 @@ const allParameters: Record<string, SensorData> = {
       xAxis: [
         {
           data: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-          scaleType: 'band', // <-- This is a 'band' (categorical) scale
+          scaleType: 'band', // This is categorical, not time
         },
       ],
     },
@@ -103,127 +128,54 @@ const allParameters: Record<string, SensorData> = {
     payload: {
       series: [
         {
-          data: generateRandomWalk(DATA_POINTS_COUNT, 0.5, 5, 1.2),
+          data: generateRandomWalk(DATA_POINTS_COUNT, 0.5, 3, 0.1),
           label: 'μS',
           showMark: false,
           area: true,
           color: '#10b981',
         },
       ],
-      xAxis: [{ data: timeAxis, scaleType: 'linear' }],
-    },
-  },
-  'breathing-rate': {
-    id: 'breathing-rate',
-    name: 'Breathing Rate',
-    currentValue: '...',
-    visualizationType: 'line',
-    payload: {
-      series: [
-        {
-          data: generateRandomWalk(DATA_POINTS_COUNT, 12, 18, 15),
-          label: 'br/min',
-          showMark: false,
-          area: true,
-          color: '#06b6d4',
-        },
-      ],
-      xAxis: [{ data: timeAxis, scaleType: 'linear' }],
-    },
-  },
-  'stress': {
-    id: 'stress',
-    name: 'Stress Score',
-    currentValue: '...',
-    visualizationType: 'line', // <-- CHANGED from 'bar' to 'line'
-    payload: {
-      series: [
-        {
-          data: generateRandomWalk(DATA_POINTS_COUNT, 1, 8, 3), // Numerical score 1-10
-          label: 'Score (1-10)',
-          showMark: false,
-          area: true,
-          color: '#8b5cf6',
-        },
-      ],
-      xAxis: [{ data: timeAxis, scaleType: 'linear' }], // <-- Now a linear time axis
-    },
-  },
-  'activity': {
-    id: 'activity',
-    name: 'Activity',
-    currentValue: '...',
-    visualizationType: 'line',
-    payload: {
-      series: [
-        {
-          data: generateRandomWalk(DATA_POINTS_COUNT, 0, 5, 1),
-          label: 'Movement',
-          showMark: false,
-          area: true,
-          color: '#f97316',
-        },
-      ],
-      xAxis: [{ data: timeAxis, scaleType: 'linear' }],
+      xAxis: [{ data: timeAxisData, scaleType: 'linear' }],
     },
   },
 };
 
-// This is our new mock database, grouped by sensor point
-const mockSensorPointDatabase: Record<string, SensorPointData> = {
+// This is the new structure that our app will use
+// It maps *sensor points* to a *list of parameters*
+export const mockSensorPointDatabase: Record<string, SensorPointData> = {
   'chest': {
     pointId: 'chest',
     pointName: 'Chest Sensors',
     parameters: [
       allParameters['heart-rate'],
-      allParameters['temperature'],
       allParameters['breathing-rate'],
-      allParameters['blood-pressure'], // This is the categorical chart
+      allParameters['temperature'],
+      allParameters['pulse-transit-time'], // <-- ADDED PTT HERE
       allParameters['activity'],
+      allParameters['blood-pressure'], // This is mock, will show up
     ],
   },
   'hand': {
     pointId: 'hand',
     pointName: 'Hand Sensor',
-    parameters: [allParameters['eda'], allParameters['stress']],
+    parameters: [
+      allParameters['stress'], // This is real, will be fetched
+      allParameters['eda'], // This is mock, will show up
+    ],
   },
 };
 
 /**
- * NEW Function: Fetches the *group* of sensors for a specific body point.
- *
- * @param sensorPointId The ID of the point clicked (e.g., "chest", "hand")
- * @param persona The selected dataset (e.g., "S2")
- * @returns A Promise that resolves to the SensorPointData
+ * MOCK: Gets a single parameter's data.
+ * This is used by our hybrid dataService as a fallback.
  */
-export const getMockDataForSensorPoint = (
-  sensorPointId: string,
-  persona: string,
-): Promise<SensorPointData> => {
-  console.log(
-    `Fetching MOCK data for: ${sensorPointId} for dataset: ${persona}`,
-  );
-
-  return new Promise((resolve, reject) => {
-    setTimeout(() => {
-      const data = mockSensorPointDatabase[sensorPointId];
-      if (data) {
-        // In a real app, you would use `persona` (e.g., 'S2') to fetch
-        // different data from the backend. Here we just return the same mock.
-        resolve(data);
-      } else {
-        reject(
-          new Error(`No mock data found for sensor point: ${sensorPointId}`),
-        );
-      }
-    }, 300); // Simulate network delay
-  });
+export const getMockParameterData = (
+  paramId: string,
+): SensorData | undefined => {
+  return allParameters[paramId];
 };
 
-// --- HELPER FUNCTIONS FOR AI ---
-/**
- * Finds the start and end indices for a given time range.
- */
+// --- Helper function for AI (copied from dataCalculator) ---
 const getIndicesForTimeRange = (
   xAxisData: number[],
   startTime: number,
@@ -250,102 +202,92 @@ const getIndicesForTimeRange = (
 };
 
 /**
- * Calculates the average of a numeric array.
- */
-const calculateAverage = (data: number[]): number | null => {
-  if (!data || data.length === 0) return null;
-  const sum = data.reduce((acc, val) => acc + val, 0);
-  return Math.round((sum / data.length) * 10) / 10;
-};
-// --- END HELPER FUNCTIONS ---
-
-/**
- * MOCK AI: Generates an overall status emoji and insight.
+ * MOCK: Generates an AI summary for the overall status.
+ * This function *actually* uses the time range now.
  */
 export const getOverallStatusAI = async (
   allData: SensorData[],
   timeRange: number[],
 ): Promise<{ emoji: string; insight: string }> => {
-  // Simulate AI thinking
-  await new Promise((res) => setTimeout(res, 250));
-
-  const [startTime, endTime] = timeRange;
-
-  // Find the 'stress' and 'heart-rate' params
-  const stressParam = allData.find((p) => p.id === 'stress');
+  // Find the 'heart-rate' and 'stress' parameters
   const hrParam = allData.find((p) => p.id === 'heart-rate');
+  const stressParam = allData.find((p) => p.id === 'stress');
 
-  let avgStress: number | null = 5; // Default
-  let avgHr: number | null = 75; // Default
+  let avgHr = 70;
+  let avgStress = 3;
 
-  // --- THIS IS THE FIX ---
-  // Now we *actually* calculate the average for the selected timeRange
-  if (stressParam) {
-    const [startIndex, endIndex] = getIndicesForTimeRange(
-      stressParam.payload.xAxis[0].data,
-      startTime,
-      endTime,
-    );
-    if (startIndex !== -1) {
-      const dataSlice = stressParam.payload.series[0].data.slice(
-        startIndex,
-        endIndex + 1,
+  try {
+    // Calculate Heart Rate Average for the time range
+    if (
+      hrParam &&
+      hrParam.payload.xAxis &&
+      hrParam.payload.series[0].data.length > 0
+    ) {
+      const [start, end] = getIndicesForTimeRange(
+        hrParam.payload.xAxis[0].data,
+        timeRange[0],
+        timeRange[1],
       );
-      avgStress = calculateAverage(dataSlice);
-    } else {
-      avgStress = null; // No data in this range
+      if (start !== -1 && end !== -1) {
+        const dataSlice = hrParam.payload.series[0].data.slice(start, end + 1);
+        avgHr = dataSlice.reduce((a: any, b: any) => a + b, 0) / dataSlice.length;
+      }
     }
+
+    // Calculate Stress Average for the time range
+    if (
+      stressParam &&
+      stressParam.payload.xAxis &&
+      stressParam.payload.series[0].data.length > 0
+    ) {
+      const [start, end] = getIndicesForTimeRange(
+        stressParam.payload.xAxis[0].data,
+        timeRange[0],
+        timeRange[1],
+      );
+      if (start !== -1 && end !== -1) {
+        const dataSlice = stressParam.payload.series[0].data.slice(
+          start,
+          end + 1,
+        );
+        avgStress = dataSlice.reduce((a: any, b: any) => a + b, 0) / dataSlice.length;
+      }
+    }
+  } catch (e) {
+    console.error('Error calculating AI status:', e);
   }
 
-  if (hrParam) {
-    const [startIndex, endIndex] = getIndicesForTimeRange(
-      hrParam.payload.xAxis[0].data,
-      startTime,
-      endTime,
-    );
-    if (startIndex !== -1) {
-      const dataSlice = hrParam.payload.series[0].data.slice(
-        startIndex,
-        endIndex + 1,
-      );
-      avgHr = calculateAverage(dataSlice);
-    } else {
-      avgHr = null; // No data in this range
-    }
-  }
-  // --- END OF FIX ---
-
-  const timeString = `around ${Math.floor(startTime / 60)}m - ${Math.floor(
-    endTime / 60,
-  )}m`;
-
-  if (avgStress === null || avgHr === null) {
+  // --- NEW MORE SENSITIVE LOGIC ---
+  if (avgHr > 95 || avgStress > 70) {
     return {
-      emoji: '🤔',
-      insight: `AI Insight: No data available for the selected time period (${timeString}).`,
+      emoji: '😥',
+      insight:
+        'Stress and heart rate seem high in this period. Might be a good time for a short break!',
     };
   }
-
-  if (avgStress > 7 && avgHr > 85) {
+  if (avgHr > 85 || avgStress > 50) {
     return {
       emoji: '😟',
-      insight: `AI Insight: High stress (avg. ${avgStress.toFixed(
-        1,
-      )}) and high heart rate (avg. ${avgHr.toFixed(
-        0,
-      )} bpm) detected in the selected period (${timeString}). Consider taking a short break.`,
+      insight:
+        'Slightly elevated readings. Data suggests a moment of stress or activity.',
     };
   }
-  if (avgStress > 7) {
+  if (avgHr < 55 && avgStress < 20) {
+    return {
+      emoji: '😴',
+      insight: 'Very low activity. Data indicates a period of deep rest or calm.',
+    };
+  }
+  if (avgStress > 4) {
     return {
       emoji: '🤔',
-      insight: `AI Insight: Stress levels appear elevated (avg. ${avgStress.toFixed(
-        1,
-      )}) ${timeString}, but heart rate is normal.`,
+      insight:
+        'Data shows some fluctuations. Heart rate is normal, but stress levels are notable.',
     };
   }
+
   return {
     emoji: '🙂',
-    insight: `AI Insight: All parameters appear stable and within normal ranges for the selected period (${timeString}).`,
+    insight: 'All parameters appear stable and within a normal range for this period.',
   };
 };

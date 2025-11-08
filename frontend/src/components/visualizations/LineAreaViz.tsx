@@ -1,7 +1,7 @@
 import React from 'react';
 import { Box, Typography } from '@mui/material';
 import { LineChart } from '@mui/x-charts/LineChart';
-import { formatSeconds } from '../../utils/formatters'; // Import our new helper
+// import { formatSeconds } from '../../utils/formatters'; // <-- REMOVED
 
 interface LineAreaVizProps {
   payload: {
@@ -24,7 +24,9 @@ const LineAreaViz: React.FC<LineAreaVizProps> = ({ payload }) => {
         xAxis={[
           {
             ...payload.xAxis[0],
-            valueFormatter: (seconds: number) => formatSeconds(seconds as number),
+            // --- THIS IS THE FIX FOR GOAL 2 ---
+            valueFormatter: (seconds: any) => `${seconds}s`,
+            // --- END OF FIX ---
           },
         ]}
       />

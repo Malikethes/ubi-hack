@@ -29,7 +29,7 @@ const HumanVisualization: React.FC<HumanVisualizationProps> = ({
   // YOU WILL NEED TO ADJUST THESE
   // to match the layout of *your* specific SVG image.
   const chestSensorPosition = { top: '25%', left: '50%' };
-  const handSensorPosition = { top: '50%', left: '38%' };
+  const handSensorPosition = { top: '50%', left: '40%' };
 
   return (
     <Box

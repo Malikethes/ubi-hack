@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, Slider, Typography } from '@mui/material';
-import { formatSeconds } from '../utils/formatters'; // Import our new helper
+// import { formatSeconds } from '../utils/formatters'; // <-- REMOVED
 
 interface TimeRangeSliderProps {
   // The earliest possible time (slider min, e.g., 0)
@@ -25,7 +25,6 @@ const TimeRangeSlider: React.FC<TimeRangeSliderProps> = ({
 
   return (
     <Box sx={{ width: '90%', margin: '2rem auto 0' }}>
-      {/* --- AESTHETIC UPDATE: Added Title --- */}
       <Typography
         variant="h6"
         sx={{ fontWeight: 600, textAlign: 'center', mb: 1 }}
@@ -39,18 +38,18 @@ const TimeRangeSlider: React.FC<TimeRangeSliderProps> = ({
       >
         Drag the sliders to filter all data by time.
       </Typography>
-      {/* --- End of Update --- */}
 
       <Slider
         value={value}
         onChange={handleChange}
         min={masterStart}
         max={masterEnd}
-        valueLabelFormat={formatSeconds} // Use our new helper
+        // --- THIS IS THE FIX FOR GOAL 2 ---
+        valueLabelFormat={(v) => `${v}s`} // Show "1500s"
+        // --- END OF FIX ---
         valueLabelDisplay="auto"
         disableSwap
         sx={{
-          // --- AESTHETIC UPDATE: Thicker line ---
           height: 8,
           '& .MuiSlider-thumb': {
             width: 24,
@@ -59,16 +58,17 @@ const TimeRangeSlider: React.FC<TimeRangeSliderProps> = ({
           '& .MuiSlider-rail': {
             opacity: 0.3,
           },
-          // --- End of Update ---
         }}
       />
       <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+        {/* --- THIS IS THE FIX FOR GOAL 2 --- */}
         <Typography variant="body1" color="text.secondary">
-          {formatSeconds(value[0])}
+          {value[0]}s
         </Typography>
         <Typography variant="body1" color="text.secondary">
-          {formatSeconds(value[1])}
+          {value[1]}s
         </Typography>
+        {/* --- END OF FIX --- */}
       </Box>
     </Box>
   );
