@@ -22,7 +22,7 @@ def compute_movement(y_values, fs: float, window_sec: float = 5.0):
         "y_values": vals,
     }
 
-def get_movement(subject: str, sensor: str = "chest", modality: str = "ACC"):
+def get_movement(subject: str, sensor: str = "wrist", modality: str = "ACC"):
     """
     Load accelerometer data (already magnitude via extract_series)
     and compute movement intensity per 5s window.
