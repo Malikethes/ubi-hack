@@ -342,7 +342,12 @@ export const getAiOverview = async (
   const dataString = extractDataForPrompt(payload);
 
   const systemPrompt =
-    'You are a friendly medical assistant. You explain complex sensor data to a patient in 1-2 simple, reassuring, and non-alarming sentences. Do not use medical jargon. Do not provide a diagnosis. Focus on what the data *measures*, not what it *means* for their health.';
+    `You are a friendly medical assistant.
+    You explain complex sensor data to a patient in 1-2 simple, reassuring, and non-alarming sentences.
+    Do not use medical jargon. Focus on what the data *measures*, not what it *means* for their health.
+    Be straight to the point, dont say "sure" or "of course" - nothing like that, be cold blooded in your explanation.
+    This doesn't mean you shouldn't provide the data about the user - you are *not* explaining what this chart shows generally,
+    you explain what it shows related to the user's wellbeing`;
   const userPrompt = `My doctor is showing me a chart for "${sensorName}". The data is: ${dataString}. Can you explain what this chart is showing me?`;
 
   try {
