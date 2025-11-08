@@ -5,6 +5,7 @@ from services.overall_data.breathing_rate import get_breathing_rate
 from services.overall_data.stress_level import get_stress_level
 from services.overall_data.temperature import get_temperature
 from services.overall_data.pulse_transit_time import get_pulse_transit_time
+from services.overall_data.skin_conductance import get_skin_conductance
 
 router = APIRouter(prefix="/data", tags=["data"])
 
@@ -149,3 +150,21 @@ def pulse_transit_time(
         raise HTTPException(status_code=400, detail=f"Signal not found: {e}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error computing PTT: {e}")
+
+
+@router.get("/skin_conductance")
+def skin_conductance(
+    subject: str = Query("S2"),
+    sensor: str = Query("wrist", description="wrist | chest"),
+    modality: str = Query("EDA"),
+):
+    try:
+        return get_skin_conductance(subject, sensor, modality)
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=404, detail=f"File not found for subject {subject}"
+        )
+    except KeyError as e:
+        raise HTTPException(status_code=400, detail=f"Bad key: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"SC compute failed: {e}")
