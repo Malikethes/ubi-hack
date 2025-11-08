@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Container,
   Typography,
@@ -6,171 +6,226 @@ import {
   CssBaseline,
   ThemeProvider,
   createTheme,
-  // Grid, // <-- REMOVED
+  Divider, // <-- Import Divider
 } from '@mui/material';
 import HumanVisualization from './components/HumanVisualization';
 import SensorModal from './components/SensorModal';
 import PersonaSelection from './components/PersonaSelection';
 import TimeRangeSlider from './components/TimeRangeSlider';
-import StatusPanel, { type SummaryData } from './components/StatusPanel'; // Import new panel
+import StatusPanel, { type SummaryData } from './components/StatusPanel';
 import {
   getMockDataForSensorPoint,
-  getOverallStatusAI, // Import new AI function
+  getOverallStatusAI,
 } from './data/mockData';
 import type { SensorData, SensorPointData } from './data/sensorData.types';
-import { calculateSummary } from './utils/dataCalculator'; // Import new calculator
+import { calculateSummary } from './utils/dataCalculator';
 
-// A simple, reassuring theme
+// --- AESTHETIC UPDATE: Refined Theme ---
 const theme = createTheme({
   palette: {
     primary: {
-      main: '#007AFF', // Figma-like blue
-      light: '#e0f0ff', // A lighter shade for backgrounds
-    },
-    secondary: {
-      main: '#8E24AA', // Figma professional purple
-    },
-    success: {
-      main: '#4CAF50', // Figma senior green
-    },
-    warning: {
-      main: '#FFA726', // Figma general orange
-    },
-    error: {
-      main: '#D32F2F',
-    },
-    text: {
-      primary: '#333',
-      secondary: '#666',
+      main: '#007AFF', // Clean blue
+      light: '#e6f2ff', // Lighter, softer blue for backgrounds
     },
     background: {
-      default: '#f4f7f6', // Light background for the whole page
+      default: '#f4f7f9', // Light grey for the page background
+      paper: '#ffffff', // White for cards
+    },
+    text: {
+      primary: '#1a202c', // Darker text for high contrast
+      secondary: '#5a6978', // Softer grey for subtext
     },
   },
   typography: {
     fontFamily: '"Inter", "Helvetica Neue", Arial, sans-serif',
+    h2: {
+      fontWeight: 700,
+      fontSize: '2.5rem',
+    },
+    h4: {
+      fontWeight: 700,
+      fontSize: '1.75rem',
+    },
+    h5: {
+      fontWeight: 600,
+      fontSize: '1.25rem', // Cleaned up for hierarchy
+    },
+    h6: {
+      fontWeight: 600,
+      fontSize: '1.1rem',
+    },
+    body1: {
+      fontSize: '1rem',
+      lineHeight: 1.6,
+    },
+    body2: {
+      fontSize: '0.9rem',
+    },
+    button: {
+      textTransform: 'none',
+      fontWeight: 600,
+      borderRadius: '8px',
+    },
   },
   components: {
     MuiCard: {
       styleOverrides: {
         root: {
-          borderRadius: '12px',
-          boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.08)',
+          borderRadius: '12px', // Softer radius
+          boxShadow: '0px 4px 12px rgba(0, 0, 0, 0.05)', // Softer shadow
+          transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
           '&:hover': {
-            boxShadow: '0px 4px 12px rgba(0, 0, 0, 0.12)',
+            boxShadow: '0px 6px 16px rgba(0, 0, 0, 0.08)',
             transform: 'translateY(-2px)',
           },
         },
       },
     },
+    MuiButton: {
+      styleOverrides: {
+        root: {
+          borderRadius: '8px',
+        },
+      },
+    },
+    MuiModal: {
+      styleOverrides: {
+        root: {
+          backdropFilter: 'blur(3px)',
+        },
+      },
+    },
   },
 });
+// --- END OF THEME UPDATE ---
 
-// --- RELATIVE TIME STATE ---
-const MASTER_DATA_DURATION_S = 3600;
+// --- MASTER TIME SETUP ---
+// This is the total duration of our mock data in seconds
+const MASTER_DATA_DURATION = 3600; // 1 hour
 
 function App() {
-  // Modal State
   const [modalOpen, setModalOpen] = useState(false);
-  const [modalIsLoading, setModalIsLoading] = useState(false);
-  const [
-    selectedSensorPointData,
-    setSelectedSensorPointData,
-  ] = useState<SensorPointData | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isAppLoading, setIsAppLoading] = useState(true); // For initial data load
+  const [selectedSensorPointData, setSelectedSensorPointData] =
+    useState<SensorPointData | null>(null);
 
-  // Global State
-  const [selectedPersona, setSelectedPersona] = useState<string>('General');
+  const [selectedDataset, setSelectedDataset] = useState<string>('S2');
+
+  // State for the master time range slider
   const [timeRange, setTimeRange] = useState<number[]>([
     0,
-    MASTER_DATA_DURATION_S,
+    MASTER_DATA_DURATION,
   ]);
 
-  // --- NEW DASHBOARD STATE ---
-  const [allParams, setAllParams] = useState<Record<string, SensorData>>({});
+  // This state holds *all* data for the panels
+  const [allChestData, setAllChestData] = useState<SensorData[] | null>(null);
+  const [allHandData, setAllHandData] = useState<SensorData[] | null>(null);
+
+  // This state holds the calculated summary data for the panel
   const [summaryData, setSummaryData] = useState<SummaryData | null>(null);
   const [overallStatus, setOverallStatus] = useState<{
     emoji: string;
     insight: string;
   } | null>(null);
-  const [isSummaryLoading, setIsSummaryLoading] = useState(true);
-  // ---
 
-  // 1. (EFFECT) Fetch all data for the dashboard when persona changes
-  useEffect(() => {
-    const fetchAllData = async () => {
-      setIsSummaryLoading(true);
-      // Fetch data from both sensor points
-      const [chestData, handData] = await Promise.all([
-        getMockDataForSensorPoint('chest', selectedPersona),
-        getMockDataForSensorPoint('hand', selectedPersona),
-      ]);
+  // Memoize the summary calculation
+  const calculatedSummary = useMemo(() => {
+    if (!allChestData || !allHandData) return null;
 
-      // Combine into one master list of all parameters
-      const combinedParams = [
-        ...chestData.parameters,
-        ...handData.parameters,
-      ];
-
-      // Store them in a Record (like a dictionary) for easy access
-      const paramsRecord = combinedParams.reduce((acc, param) => {
-        acc[param.id] = param;
-        return acc;
-      }, {} as Record<string, SensorData>);
-
-      setAllParams(paramsRecord);
+    const allData = [...allChestData, ...allHandData];
+    // Create the object that StatusPanel expects
+    const summary: SummaryData = {
+      'heart-rate': null,
+      'breathing-rate': null,
+      'stress': null,
+      'activity': null,
+      'temperature': null,
     };
 
-    fetchAllData();
-  }, [selectedPersona]);
-
-  // 2. (EFFECT) Recalculate summaries when time or data changes
-  useEffect(() => {
-    if (Object.keys(allParams).length === 0) {
-      return; // No data loaded yet
+    // Find each parameter and calculate its summary
+    for (const param of allData) {
+      if (param.id in summary) {
+        summary[param.id as keyof SummaryData] = calculateSummary(
+          param,
+          timeRange,
+        );
+      }
     }
+    return summary;
+  }, [allChestData, allHandData, timeRange]);
 
-    setIsSummaryLoading(true);
+  // Memoize the overall status AI calculation
+  const calculatedStatus = useMemo(() => {
+    if (!allChestData || !allHandData) return null;
 
-    // Calculate the summary for each panel item
-    const newSummary: SummaryData = {
-      'heart-rate': calculateSummary(allParams['heart-rate'], timeRange),
-      'breathing-rate': calculateSummary(
-        allParams['breathing-rate'],
-        timeRange,
-      ),
-      'stress': calculateSummary(allParams['stress'], timeRange),
-      'activity': calculateSummary(allParams['activity'], timeRange),
-      'temperature': calculateSummary(allParams['temperature'], timeRange),
-    };
+    // This call now matches the new signature in mockData.ts
+    const allData = [...allChestData, ...allHandData];
+    return getOverallStatusAI(allData, timeRange);
+    //
+  }, [allChestData, allHandData, timeRange]);
 
-    setSummaryData(newSummary);
+  // Effect to update summary data when calculation changes
+  useEffect(() => {
+    setSummaryData(calculatedSummary);
+  }, [calculatedSummary]);
 
-    // Get the Overall AI Status
-    getOverallStatusAI(newSummary, selectedPersona).then((status) => {
+  // Effect to update overall status when calculation changes
+  useEffect(() => {
+    // This is async, so we handle the promise
+    calculatedStatus?.then((status) => {
       setOverallStatus(status);
     });
+  }, [calculatedStatus]);
 
-    setIsSummaryLoading(false);
-  }, [timeRange, allParams, selectedPersona]);
+  // Effect to load *all* panel data on component mount or dataset change
+  useEffect(() => {
+    const loadAllData = async () => {
+      setIsAppLoading(true);
+      try {
+        // Fetch data for both points
+        const chestData = await getMockDataForSensorPoint(
+          'chest',
+          selectedDataset,
+        );
+        const handData = await getMockDataForSensorPoint(
+          'hand',
+          selectedDataset,
+        );
 
-  // --- MODAL FUNCTIONS ---
+        setAllChestData(chestData.parameters);
+        setAllHandData(handData.parameters);
+      } catch (error) {
+        console.error('Failed to load initial panel data:', error);
+        setAllChestData(null);
+        setAllHandData(null);
+      } finally {
+        setIsAppLoading(false);
+      }
+    };
+
+    loadAllData();
+  }, [selectedDataset]);
+
+  // This function is for the modal, not the panel
   const handleSensorClick = async (sensorPointId: string) => {
-    setModalIsLoading(true);
+    setIsLoading(true);
     setSelectedSensorPointData(null);
     setModalOpen(true);
 
     try {
-      // Just fetch the data for the point that was clicked
+      // Fetch data for the specific point *again* for the modal
+      // This is fast because it's mock data
       const data = await getMockDataForSensorPoint(
         sensorPointId,
-        selectedPersona,
+        selectedDataset,
       );
       setSelectedSensorPointData(data);
     } catch (error) {
       console.error('Failed to fetch sensor point data:', error);
       setSelectedSensorPointData(null);
     } finally {
-      setModalIsLoading(false);
+      setIsLoading(false);
     }
   };
 
@@ -185,74 +240,83 @@ function App() {
       <Box
         sx={{
           minHeight: '100vh',
-          backgroundColor: theme.palette.background.default,
-          py: 4,
+          backgroundColor: theme.palette.background.default, // Use the new theme background
+          py: { xs: 2, sm: 4 }, // Add padding
         }}
       >
         <Container maxWidth="lg">
           <Box sx={{ my: 4 }}>
-            <Typography variant="h5" component="h2" sx={{ mb: 2 }}>
-              Select Dataset
-            </Typography>
-            <PersonaSelection
-              selectedPersona={selectedPersona}
-              onSelectPersona={setSelectedPersona}
-            />
-
-            {/* --- NEW 2-COLUMN LAYOUT (USING FLEXBOX) --- */}
+            {/* --- AESTHETIC UPDATE: Main Content Card --- */}
             <Box
               sx={{
-                mt: 4,
-                backgroundColor: 'white',
-                borderRadius: '12px',
-                boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.05)',
-                overflow: 'hidden', // To contain the panel borders
+                mt: 2, // Reduced margin-top
+                p: { xs: 2, sm: 3, md: 4 }, // Responsive padding
+                backgroundColor: theme.palette.background.paper, // White card
+                borderRadius: '16px', // Softer border radius
+                boxShadow: '0px 4px 20px rgba(0, 0, 0, 0.06)', // Figma-like shadow
               }}
             >
-              {/* Flex container for the two columns */}
+              {/* --- NEW PLACEMENT --- */}
+              <PersonaSelection
+                selectedDataset={selectedDataset}
+                onSelectDataset={setSelectedDataset}
+              />
+              <Divider sx={{ my: 3 }} />
+              {/* --- END NEW PLACEMENT --- */}
+
+              {/* --- New 2-Column Layout (No Grid) --- */}
               <Box
                 sx={{
                   display: 'flex',
-                  flexDirection: { xs: 'column', md: 'row' }, // Stack on mobile
+                  flexDirection: { xs: 'column', md: 'row' },
+                  gap: { xs: 4, md: 3 }, // Gap between columns
                 }}
               >
-                {/* --- LEFT PANEL --- */}
+                {/* Left Column */}
                 <Box
                   sx={{
-                    width: { xs: '100%', md: '40%' }, // 40% width
-                    flexShrink: 0,
+                    flex: '1 1 40%', // Takes up 40% of the width
+                    minWidth: 0,
+                    backgroundColor: '#f9fafb', // Light bg for the panel itself
+                    borderRadius: '12px',
+                    p: { xs: 2, sm: 3 },
                   }}
                 >
                   <StatusPanel
                     summary={summaryData}
-                    isLoading={isSummaryLoading}
+                    isLoading={isAppLoading}
                   />
                 </Box>
 
-                {/* --- RIGHT PANEL (HUMAN) --- */}
+                {/* Right Column */}
                 <Box
                   sx={{
-                    width: { xs: '100%', md: '60%' }, // 60% width
-                    flexGrow: 1,
-                    textAlign: 'center',
-                    p: { xs: 2, md: 4 },
-                    minHeight: '400px',
+                    flex: '1 1 60%', // Takes up 60%
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    minWidth: 0,
                   }}
                 >
                   <Typography
-                    variant="h6"
+                    variant="h5" // Bigger title
                     component="p"
                     gutterBottom
-                    sx={{ mt: 2 }}
+                    sx={{
+                      mt: { xs: 0, md: 2 },
+                      textAlign: 'center',
+                      fontWeight: 600,
+                      color: 'text.primary',
+                    }}
                   >
                     Interactive Health Monitoring
                   </Typography>
                   <Typography
-                    variant="body2"
+                    variant="body1" // Slightly bigger subtext
                     color="text.secondary"
-                    sx={{ mb: 4 }}
+                    sx={{ mb: { xs: 2, md: 4 }, textAlign: 'center' }}
                   >
-                    Click on any sensor point to view detailed analysis
+                    Click a sensor point to view detailed analysis.
                   </Typography>
 
                   <HumanVisualization
@@ -261,33 +325,24 @@ function App() {
                   />
                 </Box>
               </Box>
+              {/* --- End of 2-Column Layout --- */}
 
-              {/* --- SLIDER (BOTTOM) --- */}
-              <Box
-                sx={{
-                  borderTop: '1px solid #eee',
-                  pt: 2,
-                  pb: 3,
-                  backgroundColor: '#fafafa',
-                }}
-              >
-                <TimeRangeSlider
-                  masterStart={0}
-                  masterEnd={MASTER_DATA_DURATION_S}
-                  value={timeRange}
-                  onChange={setTimeRange}
-                />
-              </Box>
+              {/* Time Range Slider (at the bottom) */}
+              <TimeRangeSlider
+                masterStart={0}
+                masterEnd={MASTER_DATA_DURATION}
+                value={timeRange}
+                onChange={setTimeRange}
+              />
             </Box>
           </Box>
 
-          {/* Modal remains unchanged, it will just be triggered */}
           <SensorModal
             open={modalOpen}
             onClose={handleCloseModal}
             sensorPointData={selectedSensorPointData}
-            isLoading={modalIsLoading}
-            timeRange={timeRange}
+            isLoading={isLoading}
+            timeRange={timeRange} // Pass the time range to the modal
           />
         </Container>
       </Box>

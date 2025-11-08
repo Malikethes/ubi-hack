@@ -1,5 +1,6 @@
 import React from 'react';
-import { Box, Typography, Divider } from '@mui/material';
+import { Box, Typography, Divider, Skeleton } from '@mui/material';
+// No icon imports needed
 
 // This type defines the props our panel expects
 export interface SummaryData {
@@ -15,89 +16,111 @@ interface StatusPanelProps {
   isLoading: boolean;
 }
 
-// Helper component for each row in the panel
-const StatusRow = ({
-  label,
-  value,
-  unit,
-}: {
+// A new sub-component to make our list look good and consistent
+const StatusRow: React.FC<{
+  emoji: string;
   label: string;
   value: string | number | null;
   unit: string;
-}) => (
-  <Box sx={{ py: 2 }}>
-    <Typography
-      variant="body2"
-      color="text.secondary"
-      sx={{ fontWeight: 500 }}
-    >
-      {label}
-    </Typography>
-    <Box
-      sx={{
-        display: 'flex',
-        alignItems: 'baseline',
-        gap: 0.5,
-        mt: 0.5,
-      }}
-    >
-      <Typography variant="h5" sx={{ fontWeight: 600 }}>
-        {value}
-      </Typography>
-      <Typography variant="body1" color="text.secondary">
-        {unit}
-      </Typography>
-    </Box>
-  </Box>
-);
-
-const StatusPanel: React.FC<StatusPanelProps> = ({ summary, isLoading }) => {
-  // Use '...' as a placeholder while loading
-  const val = (param: keyof SummaryData) =>
-    isLoading || !summary ? '...' : summary[param];
+  isLoading: boolean;
+}> = ({ emoji, label, value, unit, isLoading }) => {
+  const displayValue =
+    value === null || value === '...' ? '...' : Number(value).toFixed(1);
 
   return (
     <Box
       sx={{
-        p: { xs: 2, md: 3 },
-        borderRight: { xs: 'none', md: '1px solid #eee' },
-        height: '100%',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        py: 2.5, // More vertical padding
       }}
     >
-      <Typography variant="h6" component="h3" sx={{ fontWeight: 600, mb: 1 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+        <Typography sx={{ fontSize: '1.5rem', mr: 2 }}>{emoji}</Typography>
+        <Box>
+          <Typography
+            sx={{
+              fontWeight: 500,
+              color: 'text.primary',
+              lineHeight: 1.2,
+            }}
+          >
+            {label}
+          </Typography>
+          <Typography sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>
+            {isLoading ? 'Loading...' : `Avg. (${unit})`}
+          </Typography>
+        </Box>
+      </Box>
+      <Box>
+        {isLoading ? (
+          <Skeleton variant="text" width={60} height={40} />
+        ) : (
+          <Typography
+            variant="h4"
+            sx={{ fontWeight: 600, color: 'text.primary' }}
+          >
+            {displayValue}
+          </Typography>
+        )}
+      </Box>
+    </Box>
+  );
+};
+
+const StatusPanel: React.FC<StatusPanelProps> = ({ summary, isLoading }) => {
+  return (
+    <Box>
+      <Typography
+        variant="h5"
+        sx={{ fontWeight: 600, color: 'text.primary', mb: 1 }}
+      >
         Live Status
       </Typography>
-      <Typography variant="body2" color="text.secondary">
-        Summary for the selected time period.
+      <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
+        Average values for the selected time.
       </Typography>
-      <Box sx={{ mt: 2 }}>
-        <StatusRow
-          label="Heart Rate"
-          value={val('heart-rate')}
-          unit="bpm"
-        />
-        <Divider />
-        <StatusRow
-          label="Breathing Rate"
-          value={val('breathing-rate')}
-          unit="br/min"
-        />
-        <Divider />
-        {/* --- STRESS ROW IS NOW A STANDARD ROW --- */}
-        <StatusRow
-          label="Stress Level"
-          value={val('stress')}
-          unit="0-10"
-        />
-        <Divider />
-        <StatusRow label="Activity" value={val('activity')} unit="MET" />
-        <Divider />
-        <StatusRow
-          label="Temperature"
-          value={val('temperature')}
-          unit="°C"
-        />
-      </Box>
+      <Divider sx={{ mb: 1 }} />
+      <StatusRow
+        emoji="❤️"
+        label="Heart Rate"
+        unit="bpm"
+        isLoading={isLoading}
+        value={summary ? summary['heart-rate'] : null}
+      />
+      <Divider variant="middle" sx={{ opacity: 0.5 }} />
+      <StatusRow
+        emoji="🌬️"
+        label="Breathing Rate"
+        unit="br/min"
+        isLoading={isLoading}
+        value={summary ? summary['breathing-rate'] : null}
+      />
+      <Divider variant="middle" sx={{ opacity: 0.5 }} />
+      <StatusRow
+        emoji="🧘"
+        label="Stress Level"
+        unit="1-10"
+        isLoading={isLoading}
+        value={summary ? summary['stress'] : null}
+      />
+      <Divider variant="middle" sx={{ opacity: 0.5 }} />
+      <StatusRow
+        emoji="🏃"
+        label="Activity"
+        unit="Movement"
+        isLoading={isLoading}
+        value={summary ? summary['activity'] : null}
+      />
+      <Divider variant="middle" sx={{ opacity: 0.5 }} />
+      <StatusRow
+        emoji="🌡️"
+        label="Temperature"
+        unit="°C"
+        isLoading={isLoading}
+        value={summary ? summary['temperature'] : null}
+      />
     </Box>
   );
 };
