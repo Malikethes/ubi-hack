@@ -6,6 +6,7 @@ from services.overall_data.stress_level import get_stress_level
 from services.overall_data.temperature import get_temperature
 from services.overall_data.pulse_transit_time import get_pulse_transit_time
 from services.overall_data.skin_conductance import get_skin_conductance
+from services.overall_data_analysis.health_analysis import get_comprehensive_health_analysis
 
 router = APIRouter(prefix="/data", tags=["data"])
 
@@ -168,3 +169,19 @@ def skin_conductance(
         raise HTTPException(status_code=400, detail=f"Bad key: {e}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"SC compute failed: {e}")
+
+
+@router.get("/health_analysis")
+def health_analysis(
+    subject: str = Query("S2", description="Subject ID, e.g. S2"),
+):
+    try:
+        return get_comprehensive_health_analysis(subject)
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=404, detail=f"Subject data not found: {subject}"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Health analysis failed: {type(e).__name__}: {e}"
+        )
