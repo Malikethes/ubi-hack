@@ -144,18 +144,6 @@ def temperature(
         raise HTTPException(status_code=400, detail=f"Modality error: {e}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error computing temperature: {e}")
-    
-@router.get("/stress_level")
-def stress_level(
-    subject: str = Query("S2", description="Subject ID, e.g. S2"),
-    sensor: str = Query("wrist", description="Use wrist for EDA and TEMP"),
-):
-    try:
-        return get_stress_level(subject, sensor)
-    except FileNotFoundError:
-        raise HTTPException(status_code=404, detail=f"Subject file not found: {subject}")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error computing stress level: {e}")
 
 
 @router.get("/pulse_transit_time")
