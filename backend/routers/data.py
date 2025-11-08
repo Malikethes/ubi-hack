@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Query
 from services.pkl_loader import load_pkl, list_signals, extract_series, DEFAULT_FS
-from services.overall_data.heart_rate import get_heart_rate 
+from services.overall_data.heart_rate import get_heart_rate
 from services.overall_data.breathing_rate import process_respiration_signal
 
 router = APIRouter(prefix="/data", tags=["data"])
@@ -42,6 +42,7 @@ def get_series(
         raise HTTPException(status_code=400, detail=f"Invalid key: {e}")
     return chart
 
+
 @router.get("/heart_rate")
 def heart_rate(
     subject: str = Query("S2", description="Subject ID, e.g. S2"),
@@ -51,20 +52,21 @@ def heart_rate(
     try:
         return get_heart_rate(subject, sensor, modality)
     except FileNotFoundError:
-        raise HTTPException(status_code=404, detail=f"Subject file not found: {subject}")
+        raise HTTPException(
+            status_code=404, detail=f"Subject file not found: {subject}"
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error computing heart rate: {e}")
+
 
 @router.get("/breathing_rate")
 def get_breathing_rate(
     subject: str = Query("S2", description="Subject ID, e.g. S2"),
-    winsec: int = Query(
-        15, ge=1, description="Analysis window duration in seconds (default: 15)"
-    ),
+    # winsec parameter removed
 ):
     """
-    Calculates the breathing rate over time for a subject.
-    Returns a dictionary of {timestamp: rate_in_bpm} in 5-second steps.
+    Calculates the breathing rate over time for a subject using a 5-second window.
+    Returns two arrays: {x_labels: [timestamps], y_labels: [rates_in_bpm]}
     """
     path = f"data/WESAD/{subject}/{subject}.pkl"
     try:
@@ -74,37 +76,42 @@ def get_breathing_rate(
 
     try:
         chest_data = obj["signal"]["chest"]
-        
+
         resp_key = None
         for key in chest_data.keys():
             if key.upper() == "RESP":
                 resp_key = key
                 break
-        
+
         if resp_key is None:
             raise KeyError("RESP key not found in chest data")
-            
+
         payload = chest_data[resp_key]
-        
+
         if isinstance(payload, dict) and "signal" in payload:
             raw_signal = payload["signal"]
             fs = payload.get("sampling_rate") or DEFAULT_FS.get("RESP", 700)
         else:
             raw_signal = payload
             fs = DEFAULT_FS.get("RESP", 700)
-        
-        rates = process_respiration_signal(
-            raw_signal, 
-            fs=fs, 
-            winsec=winsec, 
-            step_sec=5
-        )
+
+        rates_dict = process_respiration_signal(raw_signal, fs=fs, winsec=5, step_sec=5)
+
+        x_values = list(rates_dict.keys())
+        y_values = list(rates_dict.values())
+
+        return {
+            "x_label": "Time (s)",
+            "y_label": "Breathrate (BPM)",
+            "x_vales": x_values,
+            "y_values": y_values,
+        }
 
     except KeyError:
         raise HTTPException(
             status_code=400, detail="RESP signal not found in chest data."
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error processing signal: {type(e).__name__}: {e}")
-
-    return rates
+        raise HTTPException(
+            status_code=500, detail=f"Error processing signal: {type(e).__name__}: {e}"
+        )
