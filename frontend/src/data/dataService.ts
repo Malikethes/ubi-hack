@@ -4,7 +4,9 @@ import {
   fetchBreathingRateData,
   fetchStressLevelData,
   fetchTemperatureData,
-  fetchPulseTransitTimeData, // <-- IMPORT NEW
+  fetchPulseTransitTimeData,
+  fetchMovementData,
+  fetchSkinConductanceData, // <-- IMPORT NEW
 } from '../services/apiService'; // The REAL fetch
 import {
   getMockParameterData,
@@ -48,11 +50,19 @@ export const fetchSensorPointData = async (
       else if (param.id === 'temperature') {
         return fetchTemperatureData(subject, 'wrist', 'TEMP');
       }
-      // --- NEW ROUTE ---
+      // If 'pulse-transit-time', call the real API
       else if (param.id === 'pulse-transit-time') {
         return fetchPulseTransitTimeData(subject);
       }
-      // --- END NEW ROUTE ---
+      // If 'activity', call the real API
+      else if (param.id === 'activity') {
+        return fetchMovementData(subject, 'wrist', 'ACC');
+      }
+      // --- FINAL ROUTE (EDA) ---
+      else if (param.id === 'eda') {
+        return fetchSkinConductanceData(subject, 'wrist', 'EDA');
+      }
+      // --- END FINAL ROUTE ---
       // Otherwise, get the mock data
       else {
         return Promise.resolve(getMockParameterData(param.id));

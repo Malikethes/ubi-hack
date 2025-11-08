@@ -1,40 +1,5 @@
 import type { SensorData, SensorPointData } from './sensorData.types'; // <-- FIX: import type
 
-// --- MASTER TIME SETUP ---
-const DATA_DURATION_S = 3600; // 1 hour of data
-const DATA_INTERVAL_S = 5; // Data point every 5 seconds
-const DATA_POINTS_COUNT = DATA_DURATION_S / DATA_INTERVAL_S + 1; // 721 points
-
-/**
- * Generates a smooth random walk for data.
- * @param count Number of data points
- * @param min Minimum value
- * @param max Maximum value
- * @param step Max step size per point
- */
-const generateRandomWalk = (
-  count: number,
-  min: number,
-  max: number,
-  step: number,
-): number[] => {
-  const data = [];
-  let value = (min + max) / 2;
-  for (let i = 0; i < count; i++) {
-    value += (Math.random() - 0.5) * 2 * step;
-    value = Math.min(Math.max(value, min), max); // Clamp value
-    data.push(Math.round(value * 10) / 10); // Round to 1 decimal
-  }
-  return data;
-};
-
-// --- TIME AXIS DATA ---
-// Generate a single time axis for all time-series data
-const timeAxisData = Array.from(
-  { length: DATA_POINTS_COUNT },
-  (_, i) => i * DATA_INTERVAL_S,
-);
-
 // This is our database of *individual parameters*
 // This is where we define *all* parameters the app *could* know about.
 const allParameters: Record<string, SensorData> = {
@@ -74,26 +39,23 @@ const allParameters: Record<string, SensorData> = {
     visualizationType: 'line',
     payload: {}, // Will be filled by API
   },
-
-  // --- MOCK DATA (will be used as fallback) ---
   'activity': {
     id: 'activity',
-    name: 'Activity',
+    name: 'Movement',
     currentValue: '...',
     visualizationType: 'line',
-    payload: {
-      series: [
-        {
-          data: generateRandomWalk(DATA_POINTS_COUNT, 0, 5, 0.2),
-          label: 'Movement',
-          showMark: false,
-          area: true,
-          color: '#8b5cf6',
-        },
-      ],
-      xAxis: [{ data: timeAxisData, scaleType: 'linear' }],
-    },
+    payload: {}, // Will be filled by API
   },
+  'eda': {
+    // <-- ADDED TO REAL FETCH SECTION
+    id: 'eda',
+    name: 'Skin Conductance (EDA)',
+    currentValue: '...',
+    visualizationType: 'line',
+    payload: {}, // Will be filled by API
+  },
+
+  // --- MOCK DATA (will be used as fallback) ---
   'blood-pressure': {
     id: 'blood-pressure',
     name: 'Blood Pressure',
@@ -120,24 +82,7 @@ const allParameters: Record<string, SensorData> = {
       ],
     },
   },
-  'eda': {
-    id: 'eda',
-    name: 'Skin Conductance (EDA)',
-    currentValue: '...',
-    visualizationType: 'line',
-    payload: {
-      series: [
-        {
-          data: generateRandomWalk(DATA_POINTS_COUNT, 0.5, 3, 0.1),
-          label: 'μS',
-          showMark: false,
-          area: true,
-          color: '#10b981',
-        },
-      ],
-      xAxis: [{ data: timeAxisData, scaleType: 'linear' }],
-    },
-  },
+  // 'eda' is REMOVED from mock section
 };
 
 // This is the new structure that our app will use
@@ -150,9 +95,7 @@ export const mockSensorPointDatabase: Record<string, SensorPointData> = {
       allParameters['heart-rate'],
       allParameters['breathing-rate'],
       allParameters['temperature'],
-      allParameters['pulse-transit-time'], // <-- ADDED PTT HERE
-      allParameters['activity'],
-      allParameters['blood-pressure'], // This is mock, will show up
+      allParameters['pulse-transit-time'],
     ],
   },
   'hand': {
@@ -160,7 +103,8 @@ export const mockSensorPointDatabase: Record<string, SensorPointData> = {
     pointName: 'Hand Sensor',
     parameters: [
       allParameters['stress'], // This is real, will be fetched
-      allParameters['eda'], // This is mock, will show up
+      allParameters['activity'], // This is real, will be fetched
+      allParameters['eda'], // <-- ADDED TO HAND
     ],
   },
 };
@@ -258,21 +202,21 @@ export const getOverallStatusAI = async (
   }
 
   // --- NEW MORE SENSITIVE LOGIC ---
-  if (avgHr > 95 || avgStress > 70) {
+  if (avgHr > 95 || avgStress > 7) {
     return {
       emoji: '😥',
       insight:
         'Stress and heart rate seem high in this period. Might be a good time for a short break!',
     };
   }
-  if (avgHr > 85 || avgStress > 50) {
+  if (avgHr > 85 || avgStress > 5) {
     return {
       emoji: '😟',
       insight:
         'Slightly elevated readings. Data suggests a moment of stress or activity.',
     };
   }
-  if (avgHr < 55 && avgStress < 20) {
+  if (avgHr < 55 && avgStress < 2) {
     return {
       emoji: '😴',
       insight: 'Very low activity. Data indicates a period of deep rest or calm.',
@@ -288,6 +232,7 @@ export const getOverallStatusAI = async (
 
   return {
     emoji: '🙂',
-    insight: 'All parameters appear stable and within a normal range for this period.',
+    insight:
+      'All parameters appear stable and within a normal range for this period.',
   };
 };

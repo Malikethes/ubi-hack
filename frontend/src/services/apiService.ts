@@ -19,8 +19,8 @@ interface ApiResponse {
 
 /**
  * Transforms the backend's data format into our app's format.
- * @param id 'heart-rate', 'breathing-rate', 'stress', 'temperature', 'pulse-transit-time'
- * @param name 'Heart Rate', 'Breathing Rate', 'Stress Level', 'Body Temperature', 'Pulse Transit Time'
+ * @param id 'heart-rate', 'breathing-rate', 'stress', 'temperature', 'pulse-transit-time', 'activity', 'eda'
+ * @param name 'Heart Rate', 'Breathing Rate', etc.
  * @param apiData The raw JSON response from the backend
  */
 const transformApiData = (
@@ -40,7 +40,9 @@ const transformApiData = (
   else if (id === 'breathing-rate') unit = 'br/min';
   else if (id === 'stress') unit = '(1-10)';
   else if (id === 'temperature') unit = '°C';
-  else if (id === 'pulse-transit-time') unit = 'ms'; // <-- NEW
+  else if (id === 'pulse-transit-time') unit = 'ms';
+  else if (id === 'activity') unit = 'g';
+  else if (id === 'eda') unit = 'μS'; // <-- NEW EDA UNIT
 
   const currentValue = `${lastValue.toFixed(1)} ${unit}`;
 
@@ -50,18 +52,18 @@ const transformApiData = (
   else if (id === 'breathing-rate') color = '#10b981';
   else if (id === 'stress') color = '#f59e0b';
   else if (id === 'temperature') color = '#eab308';
-  else if (id === 'pulse-transit-time') color = '#6366f1'; // <-- NEW (Purple)
+  else if (id === 'pulse-transit-time') color = '#6366f1';
+  else if (id === 'activity') color = '#8b5cf6';
+  else if (id === 'eda') color = '#06b6d4'; // <-- NEW EDA COLOR
 
   // --- Dynamic Y-axis Calculation ---
   const dataMin = Math.min(...apiData.y_values);
   const dataMax = Math.max(...apiData.y_values);
   let padding = (dataMax - dataMin) * 0.1; // 10% padding
 
-  if (padding === 0) {
-    padding = dataMax * 0.1;
-  }
-  if (padding === 0) {
-    padding = 5;
+  if (padding === 0 || isNaN(padding)) {
+    // Handle cases where all values are the same or API returns no data
+    padding = dataMax * 0.1 || 1; // Use 10% of max, or 1 if max is 0
   }
 
   const finalMin = Math.max(0, dataMin - padding); // Don't go below 0
@@ -86,7 +88,7 @@ const transformApiData = (
       xAxis: [
         {
           data: apiData.x_values,
-          scaleType: 'linear', // It's a time-based linear scale
+          scaleType: 'linear', // It's a time-based linear scale (seconds)
         },
       ],
       // Apply our dynamic Y-axis
@@ -194,7 +196,7 @@ export const fetchTemperatureData = async (
 };
 
 /**
- * NEW: Fetches and transforms Pulse Transit Time data.
+ * Fetches and transforms Pulse Transit Time data.
  * @param subject e.g., "S2"
  */
 export const fetchPulseTransitTimeData = async (
@@ -215,6 +217,58 @@ export const fetchPulseTransitTimeData = async (
     );
   } catch (error) {
     console.error('Failed to fetch Pulse Transit Time data:', error);
+    throw error;
+  }
+};
+
+/**
+ * Fetches and transforms Movement (Activity) data.
+ * @param subject e.g., "S2"
+ * @param sensor e.g., "wrist"
+ * @param modality e.g., "ACC"
+ */
+export const fetchMovementData = async (
+  subject: string,
+  sensor: string,
+  modality: string,
+): Promise<SensorData> => {
+  const url = `${BASE_URL}/data/movement?subject=${subject}&sensor=${sensor}&modality=${modality}`;
+  console.log(`Fetching REAL data from: ${url}`);
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Network response was not ok: ${response.statusText}`);
+    }
+    const apiData: ApiResponse = await response.json();
+    return transformApiData('activity', 'Movement', apiData);
+  } catch (error) {
+    console.error('Failed to fetch Movement data:', error);
+    throw error;
+  }
+};
+
+/**
+ * Fetches and transforms Skin Conductance (EDA) data.
+ * @param subject e.g., "S2"
+ * @param sensor e.g., "wrist"
+ * @param modality e.g., "EDA"
+ */
+export const fetchSkinConductanceData = async (
+  subject: string,
+  sensor: string,
+  modality: string,
+): Promise<SensorData> => {
+  const url = `${BASE_URL}/data/skin_conductance?subject=${subject}&sensor=${sensor}&modality=${modality}`;
+  console.log(`Fetching REAL data from: ${url}`);
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Network response was not ok: ${response.statusText}`);
+    }
+    const apiData: ApiResponse = await response.json();
+    return transformApiData('eda', 'Skin Conductance (EDA)', apiData);
+  } catch (error) {
+    console.error('Failed to fetch Skin Conductance (EDA) data:', error);
     throw error;
   }
 };
