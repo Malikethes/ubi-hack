@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Container,
   Typography,
@@ -6,37 +6,49 @@ import {
   CssBaseline,
   ThemeProvider,
   createTheme,
+  // Grid, // <-- REMOVED
 } from '@mui/material';
 import HumanVisualization from './components/HumanVisualization';
 import SensorModal from './components/SensorModal';
 import PersonaSelection from './components/PersonaSelection';
-import { getMockDataForSensor } from './data/mockData'; // Import our new mock function
-import type { SensorData } from './data/sensorData.types'; // Import our new type
+import TimeRangeSlider from './components/TimeRangeSlider';
+import StatusPanel, { type SummaryData } from './components/StatusPanel'; // Import new panel
+import {
+  getMockDataForSensorPoint,
+  getOverallStatusAI, // Import new AI function
+} from './data/mockData';
+import type { SensorData, SensorPointData } from './data/sensorData.types';
+import { calculateSummary } from './utils/dataCalculator'; // Import new calculator
 
-// Import all our new visualization components
-import LineAreaViz from './components/visualizations/LineAreaViz';
-import BarChartViz from './components/visualizations/BarChartViz';
-import RadialChartViz from './components/visualizations/RadialChartViz';
-import ProgressViz from './components/visualizations/ProgressViz';
-
-// Theme remains the same
+// A simple, reassuring theme
 const theme = createTheme({
   palette: {
-    primary: { main: '#007AFF', light: '#e0f0ff' },
-    secondary: { main: '#8E24AA' },
-    success: { main: '#4CAF50' },
-    warning: { main: '#FFA726' },
-    text: { primary: '#333', secondary: '#666' },
-    background: { default: '#f4f7f6' },
+    primary: {
+      main: '#007AFF', // Figma-like blue
+      light: '#e0f0ff', // A lighter shade for backgrounds
+    },
+    secondary: {
+      main: '#8E24AA', // Figma professional purple
+    },
+    success: {
+      main: '#4CAF50', // Figma senior green
+    },
+    warning: {
+      main: '#FFA726', // Figma general orange
+    },
+    error: {
+      main: '#D32F2F',
+    },
+    text: {
+      primary: '#333',
+      secondary: '#666',
+    },
+    background: {
+      default: '#f4f7f6', // Light background for the whole page
+    },
   },
   typography: {
     fontFamily: '"Inter", "Helvetica Neue", Arial, sans-serif',
-    h2: { fontWeight: 600, fontSize: '2.5rem', color: '#333' },
-    h4: { fontWeight: 600, fontSize: '1.8rem', color: '#333' },
-    h5: { fontWeight: 600, fontSize: '1.2rem', color: '#333' },
-    h6: { fontWeight: 500, fontSize: '1.1rem' },
-    body1: { fontSize: '0.95rem', lineHeight: 1.6 },
-    button: { textTransform: 'none' },
   },
   components: {
     MuiCard: {
@@ -44,7 +56,6 @@ const theme = createTheme({
         root: {
           borderRadius: '12px',
           boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.08)',
-          transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
           '&:hover': {
             boxShadow: '0px 4px 12px rgba(0, 0, 0, 0.12)',
             transform: 'translateY(-2px)',
@@ -52,73 +63,132 @@ const theme = createTheme({
         },
       },
     },
-    MuiButton: { styleOverrides: { root: { borderRadius: '8px' } } },
-    MuiModal: { styleOverrides: { root: { backdropFilter: 'blur(3px)' } } },
   },
 });
 
-function App() {
-  const [modalOpen, setModalOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [selectedSensor, setSelectedSensor] = useState<SensorData | null>(null);
-  const [selectedPersona, setSelectedPersona] = useState<string>('General');
+// --- RELATIVE TIME STATE ---
+const MASTER_DATA_DURATION_S = 3600;
 
-  const handleSensorClick = async (sensorId: string) => {
-    setIsLoading(true);
-    setSelectedSensor(null);
+function App() {
+  // Modal State
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalIsLoading, setModalIsLoading] = useState(false);
+  const [
+    selectedSensorPointData,
+    setSelectedSensorPointData,
+  ] = useState<SensorPointData | null>(null);
+
+  // Global State
+  const [selectedPersona, setSelectedPersona] = useState<string>('General');
+  const [timeRange, setTimeRange] = useState<number[]>([
+    0,
+    MASTER_DATA_DURATION_S,
+  ]);
+
+  // --- NEW DASHBOARD STATE ---
+  const [allParams, setAllParams] = useState<Record<string, SensorData>>({});
+  const [summaryData, setSummaryData] = useState<SummaryData | null>(null);
+  const [overallStatus, setOverallStatus] = useState<{
+    emoji: string;
+    insight: string;
+  } | null>(null);
+  const [isSummaryLoading, setIsSummaryLoading] = useState(true);
+  // ---
+
+  // 1. (EFFECT) Fetch all data for the dashboard when persona changes
+  useEffect(() => {
+    const fetchAllData = async () => {
+      setIsSummaryLoading(true);
+      // Fetch data from both sensor points
+      const [chestData, handData] = await Promise.all([
+        getMockDataForSensorPoint('chest', selectedPersona),
+        getMockDataForSensorPoint('hand', selectedPersona),
+      ]);
+
+      // Combine into one master list of all parameters
+      const combinedParams = [
+        ...chestData.parameters,
+        ...handData.parameters,
+      ];
+
+      // Store them in a Record (like a dictionary) for easy access
+      const paramsRecord = combinedParams.reduce((acc, param) => {
+        acc[param.id] = param;
+        return acc;
+      }, {} as Record<string, SensorData>);
+
+      setAllParams(paramsRecord);
+    };
+
+    fetchAllData();
+  }, [selectedPersona]);
+
+  // 2. (EFFECT) Recalculate summaries when time or data changes
+  useEffect(() => {
+    if (Object.keys(allParams).length === 0) {
+      return; // No data loaded yet
+    }
+
+    setIsSummaryLoading(true);
+
+    // Calculate the summary for each panel item
+    const newSummary: SummaryData = {
+      'heart-rate': calculateSummary(allParams['heart-rate'], timeRange),
+      'breathing-rate': calculateSummary(
+        allParams['breathing-rate'],
+        timeRange,
+      ),
+      'stress': calculateSummary(allParams['stress'], timeRange),
+      'activity': calculateSummary(allParams['activity'], timeRange),
+      'temperature': calculateSummary(allParams['temperature'], timeRange),
+    };
+
+    setSummaryData(newSummary);
+
+    // Get the Overall AI Status
+    getOverallStatusAI(newSummary, selectedPersona).then((status) => {
+      setOverallStatus(status);
+    });
+
+    setIsSummaryLoading(false);
+  }, [timeRange, allParams, selectedPersona]);
+
+  // --- MODAL FUNCTIONS ---
+  const handleSensorClick = async (sensorPointId: string) => {
+    setModalIsLoading(true);
+    setSelectedSensorPointData(null);
     setModalOpen(true);
 
     try {
-      // Call our mock data function
-      const data = await getMockDataForSensor(sensorId, selectedPersona);
-      setSelectedSensor(data);
+      // Just fetch the data for the point that was clicked
+      const data = await getMockDataForSensorPoint(
+        sensorPointId,
+        selectedPersona,
+      );
+      setSelectedSensorPointData(data);
     } catch (error) {
-      console.error('Failed to fetch sensor data:', error);
-      setSelectedSensor(null);
+      console.error('Failed to fetch sensor point data:', error);
+      setSelectedSensorPointData(null);
     } finally {
-      setIsLoading(false);
+      setModalIsLoading(false);
     }
   };
 
   const handleCloseModal = () => {
     setModalOpen(false);
-    setSelectedSensor(null);
-  };
-
-  // === NEW FUNCTION ===
-  // This function decides which visualization component to render
-  // based on the data we received.
-  const renderVisualization = (sensor: SensorData | null) => {
-    if (!sensor) return null;
-
-    switch (sensor.visualizationType) {
-      case 'line':
-      case 'area':
-        return <LineAreaViz payload={sensor.payload} />;
-      
-      case 'bar':
-      case 'stacked-bar':
-        return <BarChartViz payload={sensor.payload} />;
-
-      case 'radial':
-        return <RadialChartViz payload={sensor.payload} />;
-
-      case 'progress':
-        return <ProgressViz payload={sensor.payload} />;
-        
-      default:
-        return (
-          <Typography color="error">
-            Error: No visualization component found for type "{sensor.visualizationType}"
-          </Typography>
-        );
-    }
+    setSelectedSensorPointData(null);
   };
 
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <Box sx={{ minHeight: '100vh', backgroundColor: theme.palette.background.default, py: 4 }}>
+      <Box
+        sx={{
+          minHeight: '100vh',
+          backgroundColor: theme.palette.background.default,
+          py: 4,
+        }}
+      >
         <Container maxWidth="lg">
           <Box sx={{ my: 4 }}>
             <Typography variant="h5" component="h2" sx={{ mb: 2 }}>
@@ -129,40 +199,96 @@ function App() {
               onSelectPersona={setSelectedPersona}
             />
 
+            {/* --- NEW 2-COLUMN LAYOUT (USING FLEXBOX) --- */}
             <Box
               sx={{
                 mt: 4,
-                p: 4,
                 backgroundColor: 'white',
                 borderRadius: '12px',
                 boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.05)',
-                textAlign: 'center',
+                overflow: 'hidden', // To contain the panel borders
               }}
             >
-              <Typography variant="h6" component="p" gutterBottom sx={{ mt: 2 }}>
-                Interactive Health Monitoring
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 4 }}>
-                Click on any metric point to view detailed analysis
-              </Typography>
+              {/* Flex container for the two columns */}
+              <Box
+                sx={{
+                  display: 'flex',
+                  flexDirection: { xs: 'column', md: 'row' }, // Stack on mobile
+                }}
+              >
+                {/* --- LEFT PANEL --- */}
+                <Box
+                  sx={{
+                    width: { xs: '100%', md: '40%' }, // 40% width
+                    flexShrink: 0,
+                  }}
+                >
+                  <StatusPanel
+                    summary={summaryData}
+                    isLoading={isSummaryLoading}
+                  />
+                </Box>
 
-              {/* HumanVisualization component remains the same */}
-              <HumanVisualization onSensorClick={handleSensorClick} />
+                {/* --- RIGHT PANEL (HUMAN) --- */}
+                <Box
+                  sx={{
+                    width: { xs: '100%', md: '60%' }, // 60% width
+                    flexGrow: 1,
+                    textAlign: 'center',
+                    p: { xs: 2, md: 4 },
+                    minHeight: '400px',
+                  }}
+                >
+                  <Typography
+                    variant="h6"
+                    component="p"
+                    gutterBottom
+                    sx={{ mt: 2 }}
+                  >
+                    Interactive Health Monitoring
+                  </Typography>
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    sx={{ mb: 4 }}
+                  >
+                    Click on any sensor point to view detailed analysis
+                  </Typography>
+
+                  <HumanVisualization
+                    onSensorClick={handleSensorClick}
+                    overallStatus={overallStatus}
+                  />
+                </Box>
+              </Box>
+
+              {/* --- SLIDER (BOTTOM) --- */}
+              <Box
+                sx={{
+                  borderTop: '1px solid #eee',
+                  pt: 2,
+                  pb: 3,
+                  backgroundColor: '#fafafa',
+                }}
+              >
+                <TimeRangeSlider
+                  masterStart={0}
+                  masterEnd={MASTER_DATA_DURATION_S}
+                  value={timeRange}
+                  onChange={setTimeRange}
+                />
+              </Box>
             </Box>
           </Box>
 
-          {/* The SensorModal is now a "frame".
-            We pass the sensor data to it for the header and AI box.
-            We pass the *correct visualization component* as its child.
-          */}
+          {/* Modal remains unchanged, it will just be triggered */}
           <SensorModal
             open={modalOpen}
             onClose={handleCloseModal}
-            sensor={selectedSensor}
-            isLoading={isLoading}
-          >
-            {renderVisualization(selectedSensor)}
-          </SensorModal>
+            sensorPointData={selectedSensorPointData}
+            isLoading={modalIsLoading}
+            timeRange={timeRange}
+          />
         </Container>
       </Box>
     </ThemeProvider>

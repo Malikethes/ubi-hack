@@ -1,82 +1,48 @@
 import React, { useState } from 'react';
-import { Box } from '@mui/material'; // We still use Box for layout
+import { Box, Tooltip, Typography } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
 
-// We'll use the sensor data structure from your Figma code,
-// as it's perfect for this (x, y, color, etc.)
-// These IDs (e.g., 'heart-rate') will be passed to our dataService.
+// Our two sensor points
 const SENSOR_POINTS = [
   {
-    id: 'heart-rate',
-    name: 'Heart Rate',
-    x: 200,
-    y: 180,
-    color: '#ef4444',
+    id: 'chest',
+    name: 'Chest Sensors',
+    x: '50%',
+    y: '35%',
+    color: '#007AFF', // Blue
   },
   {
-    id: 'temperature',
-    name: 'Body Temperature',
-    x: 200,
-    y: 80,
-    color: '#f59e0b',
-  },
-  {
-    id: 'blood-pressure',
-    name: 'Blood Pressure',
-    x: 240,
-    y: 170,
-    color: '#3b82f6',
-  },
-  {
-    id: 'oxygen',
-    name: 'Oxygen Saturation',
-    x: 160,
-    y: 170,
-    color: '#06b6d4',
-  },
-  {
-    id: 'steps', // Mapped to 'activity'
-    name: 'Activity (Steps)',
-    x: 200,
-    y: 360,
-    color: '#8b5cf6',
-  },
-  {
-    id: 'sleep',
-    name: 'Sleep Quality',
-    x: 200,
-    y: 50, // Slightly different from 'temperature' y
-    color: '#6366f1',
-  },
-  {
-    id: 'respiratory-rate',
-    name: 'Respiratory Rate',
-    x: 160,
-    y: 200,
-    color: '#10b981',
-  },
-  {
-    id: 'hydration',
-    name: 'Hydration Level',
-    x: 240,
-    y: 200,
-    color: '#14b8a6',
+    id: 'hand',
+    name: 'Hand Sensor',
+    x: '80%',
+    y: '55%',
+    color: '#ef4444', // Red
   },
 ];
 
+// New Prop type
+interface OverallStatus {
+  emoji: string;
+  insight: string;
+}
+
 interface HumanVisualizationProps {
-  onSensorClick: (sensorId: string) => void;
+  onSensorClick: (sensorPointId: string) => void;
+  overallStatus: OverallStatus | null; // New prop
 }
 
 const HumanVisualization: React.FC<HumanVisualizationProps> = ({
   onSensorClick,
+  overallStatus,
 }) => {
   const [hoveredSensor, setHoveredSensor] = useState<string | null>(null);
+  const theme = useTheme();
 
   return (
     <Box
       sx={{
         width: '100%',
-        maxWidth: '400px', // Set max width for the SVG
+        maxWidth: '300px',
         margin: '2rem auto',
         position: 'relative',
         display: 'flex',
@@ -84,64 +50,55 @@ const HumanVisualization: React.FC<HumanVisualizationProps> = ({
         alignItems: 'center',
       }}
     >
-      <svg
-        width="400"
-        height="500"
-        viewBox="0 0 400 500"
-        style={{ maxWidth: '100%', height: 'auto' }}
+      {/* --- NEW: Overall Status Emoji --- */}
+      <Tooltip
+        title={
+          overallStatus ? overallStatus.insight : 'Calculating overall status...'
+        }
+        arrow
+        placement="top"
       >
-        {/* Human Body Outline - from your code */}
-        <g stroke="#94a3b8" strokeWidth="2" fill="none">
-          {/* Head */}
-          <circle cx="200" cy="60" r="35" />
+        <Typography
+          variant="h3"
+          sx={{
+            position: 'absolute',
+            top: '5%', // Position near the head
+            left: '10%', // Position to the left
+            cursor: 'default',
+            transition: 'transform 0.2s ease',
+            '&:hover': {
+              transform: 'scale(1.1)',
+            },
+          }}
+        >
+          {overallStatus ? overallStatus.emoji : '🤔'}
+        </Typography>
+      </Tooltip>
+      {/* --- End of New Code --- */}
 
-          {/* Neck */}
-          <line x1="200" y1="95" x2="200" y2="120" />
+      <svg
+        width="100%"
+        height="100%"
+        viewBox="0 0 300 500"
+        preserveAspectRatio="xMidYMid meet"
+      >
+        {/* SVG Path for human body */}
+        <path
+          d="M150 75 C125 75 105 95 105 120 S125 165 150 165 195 145 195 120 175 75 150 75z M150 170 C120 170 90 175 90 205 L90 310 C90 340 110 350 110 350 L110 470 C110 485 120 495 135 495 L165 495 C180 495 190 485 190 470 L190 350 C190 350 210 340 210 310 L210 205 C210 175 180 170 150 170z M80 210 C70 210 60 215 60 225 L60 300 C60 310 70 315 75 315 S85 305 85 300 L85 225 C85 215 80 210 80 210z M220 210 C230 210 240 215 240 225 L240 300 C240 310 230 315 225 315 S215 305 215 300 L215 225 C215 215 220 210 220 210z"
+          fill="#e0e0e0"
+          stroke={theme.palette.grey[400]}
+          strokeWidth="2"
+        />
 
-          {/* Torso */}
-          <path d="M 200 120 L 160 130 L 150 200 L 155 280 L 175 320 L 200 320 L 225 320 L 245 280 L 250 200 L 240 130 Z" />
-
-          {/* Arms */}
-          <path d="M 160 130 L 120 150 L 100 240" strokeLinecap="round" />
-          <path d="M 240 130 L 280 150 L 300 240" strokeLinecap="round" />
-
-          {/* Legs */}
-          <path d="M 175 320 L 170 400 L 175 480" strokeLinecap="round" />
-          <path d="M 225 320 L 230 400 L 225 480" strokeLinecap="round" />
-        </g>
-
-        {/* Clickable Health Metric Points - from your code */}
+        {/* Clickable Health Metric Points */}
         {SENSOR_POINTS.map((sensor) => (
           <g key={sensor.id}>
-            <circle
-              cx={sensor.x}
-              cy={sensor.y}
-              r={hoveredSensor === sensor.id ? 16 : 12}
-              fill={sensor.color}
-              opacity={hoveredSensor === sensor.id ? 1 : 0.8}
-              onClick={() => onSensorClick(sensor.id)}
-              onMouseEnter={() => setHoveredSensor(sensor.id)}
-              onMouseLeave={() => setHoveredSensor(null)}
-              style={{
-                cursor: 'pointer',
-                transition: 'r 0.2s ease-out, opacity 0.2s ease-out',
-              }}
-            />
-            {/* Inner white circle for style */}
-            <circle
-              cx={sensor.x}
-              cy={sensor.y}
-              r={6}
-              fill="white"
-              style={{ pointerEvents: 'none' }} // Makes it non-interactive
-            />
-
-            {/* Hover tooltip text (from your code) */}
+            {/* Tooltip text (SVG native) */}
             {hoveredSensor === sensor.id && (
               <g style={{ pointerEvents: 'none' }}>
                 <rect
-                  x={sensor.x - 60}
-                  y={sensor.y - 40}
+                  x={parseFloat(sensor.x) * 3 - 60}
+                  y={parseFloat(sensor.y) * 5 - 40}
                   width="120"
                   height="28"
                   fill="white"
@@ -150,8 +107,8 @@ const HumanVisualization: React.FC<HumanVisualizationProps> = ({
                   rx="4"
                 />
                 <text
-                  x={sensor.x}
-                  y={sensor.y - 22}
+                  x={parseFloat(sensor.x) * 3}
+                  y={parseFloat(sensor.y) * 5 - 22}
                   textAnchor="middle"
                   fill="#1e293b"
                   style={{ fontSize: '14px', fontWeight: 500 }}
@@ -160,6 +117,23 @@ const HumanVisualization: React.FC<HumanVisualizationProps> = ({
                 </text>
               </g>
             )}
+
+            {/* Clickable Circle */}
+            <circle
+              cx={sensor.x}
+              cy={sensor.y}
+              r={hoveredSensor === sensor.id ? 10 : 8}
+              fill={sensor.color}
+              onClick={() => onSensorClick(sensor.id)}
+              onMouseEnter={() => setHoveredSensor(sensor.id)}
+              onMouseLeave={() => setHoveredSensor(null)}
+              style={{
+                cursor: 'pointer',
+                transition: 'r 0.2s ease-out',
+                stroke: 'white',
+                strokeWidth: 2,
+              }}
+            />
           </g>
         ))}
       </svg>
